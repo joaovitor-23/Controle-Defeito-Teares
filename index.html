@@ -210,25 +210,92 @@
     }
 
     // --- PDF ---
+
+
     function exportarPDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        const registros = JSON.parse(localStorage.getItem('teares') || '[]');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const registros = JSON.parse(localStorage.getItem('teares') || '[]');
 
-        doc.setFontSize(16);
-        doc.text("Relatório de Produção - Teares", 14, 15);
-
-        const rows = registros.map(r => [r.tear, r.artigo, r.defeito, formataData(r.data), r.horario, r.turno]);
-
-        doc.autoTable({
-            head: [['Tear', 'Artigo', 'Defeito', 'Data', 'Hora', 'Turno']],
-            body: rows,
-            startY: 25,
-            theme: 'striped'
-        });
-
-        doc.save("relatorio_teares.pdf");
+    if (registros.length === 0) {
+        alert("Não há dados para exportar.");
+        return;
     }
+
+    // --- 1. Cabeçalho do Relatório ---
+    doc.setFontSize(18);
+    doc.text("Relatório de Produção e Qualidade Detalhado", 14, 15);
+
+    // Tabela Principal de Registros
+    const rows = registros.map(r => [r.tear, r.artigo, r.defeito, formataData(r.data), r.horario, r.turno]);
+
+    doc.autoTable({
+        head: [['Tear', 'Artigo', 'Defeito', 'Data', 'Hora', 'Turno']],
+        body: rows,
+        startY: 25,
+        theme: 'striped',
+        headStyles: { fillColor: [41, 128, 185] }
+    });
+
+    // --- 2. Lógica de Agrupamento por Dia e Turno ---
+    const analiseDoc = {};
+
+    registros.forEach(reg => {
+        const dataFmt = reg.data; // YYYY-MM-DD
+        if (!analiseDoc[dataFmt]) {
+            analiseDoc[dataFmt] = { 'Manhã': 0, 'Tarde': 0, 'Noite': 0 };
+        }
+        analiseDoc[dataFmt][reg.turno]++;
+    });
+
+    // Ordenar os dias para o relatório
+    const diasOrdenados = Object.keys(analiseDoc).sort();
+
+    // Montar as linhas para a tabela de histórico
+    const corpoTabelaDias = diasOrdenados.map(data => {
+        const turnos = analiseDoc[data];
+        return [
+            formataData(data),
+            `Manhã: ${turnos['Manhã']} | Tarde: ${turnos['Tarde']} | Noite: ${turnos['Noite']}`,
+            (turnos['Manhã'] + turnos['Tarde'] + turnos['Noite']) // Total do dia
+        ];
+    });
+
+    // --- 3. Gerar Tabela de Histórico Diário com Detalhe de Turnos ---
+    let finalY = doc.lastAutoTable.finalY + 15;
+    if (finalY > 230) { doc.addPage(); finalY = 20; }
+
+    doc.setFontSize(14);
+    doc.setTextColor(40);
+    doc.text("Resumo Diário por Turno", 14, finalY);
+
+    doc.autoTable({
+        startY: finalY + 5,
+        head: [['Data', 'Detalhamento por Turno', 'Total Dia']],
+        body: corpoTabelaDias,
+        theme: 'grid',
+        headStyles: { fillColor: [39, 174, 96] }, // Verde
+        columnStyles: {
+            0: { cellWidth: 35 },
+            1: { cellWidth: 120 },
+            2: { halign: 'center', fontStyle: 'bold' }
+        }
+    });
+
+    //
+
+    // --- 4. Rodapé ---
+    const pageCount = doc.internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.setTextColor(150);
+        doc.text(`Página ${i} de ${pageCount} - Gerado em ${new Date().toLocaleString()}`, 14, doc.internal.pageSize.height - 10);
+    }
+
+    doc.save("analise_diaria_turnos.pdf");
+    }
+
 </script>
 
 </body>
