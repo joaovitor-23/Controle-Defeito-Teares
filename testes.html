@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Teares - Completo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; padding: 20px; font-family: 'Segoe UI', sans-serif; }
+        .card { border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
+        .btn-edit { color: #ffc107; cursor: pointer; font-size: 1.2rem; margin-right: 15px; }
+        .btn-delete { color: #dc3545; cursor: pointer; font-size: 1.2rem; }
+        .badge-manha { background-color: #0dcaf0; }
+        .badge-tarde { background-color: #ffc107; color: #000; }
+        .badge-noite { background-color: #6c757d; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="h4">Sistemas de Controle de Teares</h2>
+        <div class="btn-group">
+            <button onclick="exportarPDF()" class="btn btn-outline-dark btn-sm"><i class="bi bi-file-pdf"></i> Exportar PDF</button>
+            <button onclick="limparBanco()" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Limpar Tudo</button>
+        </div>
+    </div>
+
+    <div class="card" id="cardForm">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span id="formTitle">Novo Registro</span>
+            <span id="editBadge" class="badge bg-warning text-dark d-none">EDITANDO</span>
+        </div>
+        <div class="card-body">
+            <form id="formRegistro" class="row g-3">
+                <input type="hidden" id="editId">
+
+                <div class="col-md-2 col-6">
+                    <label class="form-label">Tear</label>
+                    <input type="number" id="tear" class="form-control" required>
+                </div>
+                <div class="col-md-3 col-6">
+                    <label class="form-label">Artigo</label>
+                    <input type="text" id="artigo" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Defeito</label>
+                    <input type="text" id="defeito" class="form-control" required>
+                </div>
+                <div class="col-md-2 col-6">
+                    <label class="form-label">Data</label>
+                    <input type="date" id="data" class="form-control" required>
+                </div>
+                <div class="col-md-2 col-6">
+                    <label class="form-label">Hora</label>
+                    <input type="time" id="horario" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Turno</label>
+                    <select id="turno" class="form-select" required>
+                        <option value="Manhã">Manhã</option>
+                        <option value="Tarde">Tarde</option>
+                        <option value="Noite">Noite</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex gap-2">
+                    <button type="submit" id="btnSalvar" class="btn btn-primary px-4">Salvar</button>
+                    <button type="button" id="btnCancelar" class="btn btn-secondary d-none" onclick="cancelarEdicao()">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Tear</th>
+                        <th>Artigo</th>
+                        <th>Defeito</th>
+                        <th>Data</th>
+                        <th>Hora</th>
+                        <th>Turno</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="tabelaCorpo"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('formRegistro');
+    const tabela = document.getElementById('tabelaCorpo');
+    const editIdInput = document.getElementById('editId');
+    const btnSalvar = document.getElementById('btnSalvar');
+    const btnCancelar = document.getElementById('btnCancelar');
+
+    document.addEventListener('DOMContentLoaded', listarRegistros);
+
+    // --- SALVAR / ATUALIZAR ---
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const registros = JSON.parse(localStorage.getItem('teares') || '[]');
+        const idAtual = editIdInput.value;
+
+        const dados = {
+            tear: document.getElementById('tear').value,
+            artigo: document.getElementById('artigo').value,
+            defeito: document.getElementById('defeito').value,
+            data: document.getElementById('data').value,
+            horario: document.getElementById('horario').value, // Campo de hora reincluído
+            turno: document.getElementById('turno').value
+        };
+
+        if (idAtual) {
+            const index = registros.findIndex(r => r.id == idAtual);
+            registros[index] = { id: Number(idAtual), ...dados };
+        } else {
+            registros.push({ id: Date.now(), ...dados });
+        }
+
+        localStorage.setItem('teares', JSON.stringify(registros));
+        cancelarEdicao();
+        listarRegistros();
+    });
+
+    // --- LISTAR ---
+    function listarRegistros() {
+        const registros = JSON.parse(localStorage.getItem('teares') || '[]');
+        // Ordena por data e hora (mais recentes primeiro)
+        registros.sort((a, b) => (b.data + b.horario).localeCompare(a.data + a.horario));
+
+        tabela.innerHTML = registros.length ? registros.map(reg => `
+            <tr>
+                <td><strong>${reg.tear}</strong></td>
+                <td>${reg.artigo}</td>
+                <td>${reg.defeito}</td>
+                <td>${formataData(reg.data)}</td>
+                <td>${reg.horario}</td>
+                <td><span class="badge ${getBadgeClass(reg.turno)}">${reg.turno}</span></td>
+                <td class="text-center">
+                    <i class="bi bi-pencil-square btn-edit" onclick="prepararEdicao(${reg.id})"></i>
+                    <i class="bi bi-trash btn-delete" onclick="excluirRegistro(${reg.id})"></i>
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="7" class="text-center py-4 text-muted">Nenhum registro encontrado</td></tr>';
+    }
+
+    // --- HELPERS ---
+    function formataData(data) {
+        return data.split('-').reverse().join('/');
+    }
+
+    function getBadgeClass(turno) {
+        if(turno === 'Manhã') return 'badge-manha';
+        if(turno === 'Tarde') return 'badge-tarde';
+        return 'badge-noite';
+    }
+
+    function prepararEdicao(id) {
+        const registros = JSON.parse(localStorage.getItem('teares') || '[]');
+        const reg = registros.find(r => r.id == id);
+        if (reg) {
+            editIdInput.value = reg.id;
+            document.getElementById('tear').value = reg.tear;
+            document.getElementById('artigo').value = reg.artigo;
+            document.getElementById('defeito').value = reg.defeito;
+            document.getElementById('data').value = reg.data;
+            document.getElementById('horario').value = reg.horario;
+            document.getElementById('turno').value = reg.turno;
+
+            btnSalvar.textContent = "Atualizar";
+            btnSalvar.className = "btn btn-warning px-4";
+            btnCancelar.classList.remove('d-none');
+            document.getElementById('editBadge').classList.remove('d-none');
+            document.getElementById('cardForm').scrollIntoView();
+        }
+    }
+
+    function cancelarEdicao() {
+        form.reset();
+        editIdInput.value = "";
+        btnSalvar.textContent = "Salvar";
+        btnSalvar.className = "btn btn-primary px-4";
+        btnCancelar.classList.add('d-none');
+        document.getElementById('editBadge').classList.add('d-none');
+    }
+
+    function excluirRegistro(id) {
+        if(confirm("Excluir este registro?")) {
+            let registros = JSON.parse(localStorage.getItem('teares') || '[]');
+            registros = registros.filter(r => r.id != id);
+            localStorage.setItem('teares', JSON.stringify(registros));
+            listarRegistros();
+        }
+    }
+
+    function limparBanco() {
+        if(confirm("Apagar todos os dados?")) {
+            localStorage.removeItem('teares');
+            listarRegistros();
+        }
+    }
+
+    // --- PDF ---
+    function exportarPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const registros = JSON.parse(localStorage.getItem('teares') || '[]');
+
+        doc.setFontSize(16);
+        doc.text("Relatório de Produção - Teares", 14, 15);
+
+        const rows = registros.map(r => [r.tear, r.artigo, r.defeito, formataData(r.data), r.horario, r.turno]);
+
+        doc.autoTable({
+            head: [['Tear', 'Artigo', 'Defeito', 'Data', 'Hora', 'Turno']],
+            body: rows,
+            startY: 25,
+            theme: 'striped'
+        });
+
+        doc.save("relatorio_teares.pdf");
+    }
+</script>
+
+</body>
+</html>
